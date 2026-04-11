@@ -1,213 +1,310 @@
 import * as THREE from 'three';
 
 // ═══════════════════════════════════════════
-//  Player — animated school uniform character
+//  Player — cool tactical character + gun
 // ═══════════════════════════════════════════
 export class Player {
   constructor(scene) {
-    this.scene = scene;
-    this.position = new THREE.Vector3(0, 0, 8);
+    this.scene    = scene;
+    this.position = new THREE.Vector3(0, 0, 10);
     this.velocity = new THREE.Vector3();
-    this.rotation = 0; // Y rotation
+    this.rotation = 0;
     this.grounded = true;
     this.speedMultiplier = 1.0;
-    this._walkTime = 0;
+    this.hp       = 100;
+    this.maxHp    = 100;
+
+    // Weapon state
+    this.ammo     = 30;
+    this.maxAmmo  = 30;
+    this.reserve  = 90;
+    this.reloading = false;
+    this._reloadTimer = 0;
+    this._fireTimer   = 0;
+    this._muzzleFlash = null;
+
+    this._walkT   = 0;
     this._wasGrounded = true;
+    this._squishT = 0;
+    this._aimT    = 0; // 0=hip, 1=aim
+    this._bobT    = 0;
 
     this._buildCharacter();
+    this._buildGun();
   }
 
-  _mat(color, roughness = 0.75, metalness = 0) {
-    return new THREE.MeshStandardMaterial({ color, roughness, metalness });
+  _mat(hex, rough = 0.7, metal = 0) {
+    return new THREE.MeshStandardMaterial({ color: hex, roughness: rough, metalness: metal });
   }
 
+  // ── Character body ───────────────────────
   _buildCharacter() {
-    this.group = new THREE.Group();
-    this.scene.add(this.group);
+    this.root = new THREE.Group();
+    this.scene.add(this.root);
 
-    // ── Shoes ────────────────────────────────
-    this.shoeL = this._part(new THREE.BoxGeometry(0.24, 0.14, 0.38), 0x111111, 0, 0, 0);
-    this.shoeR = this._part(new THREE.BoxGeometry(0.24, 0.14, 0.38), 0x111111, 0, 0, 0);
+    // --- Tactical boots ---
+    this._mk(new THREE.BoxGeometry(.26,.16,.42), 0x1a1a1a, -.2,-.19,.04, this.root);
+    this._mk(new THREE.BoxGeometry(.26,.16,.42), 0x1a1a1a,  .2,-.19,.04, this.root);
 
-    // ── Legs (trousers) ──────────────────────
-    this.legL = this._part(new THREE.CapsuleGeometry(0.13, 0.6, 4, 8), 0x1a1a50, 0, 0, 0);
-    this.legR = this._part(new THREE.CapsuleGeometry(0.13, 0.6, 4, 8), 0x1a1a50, 0, 0, 0);
+    // Boot soles
+    this._mk(new THREE.BoxGeometry(.28,.04,.44), 0x0d0d0d, -.2,-.27,.04, this.root);
+    this._mk(new THREE.BoxGeometry(.28,.04,.44), 0x0d0d0d,  .2,-.27,.04, this.root);
 
-    // ── Belt ─────────────────────────────────
-    this.belt = this._part(new THREE.BoxGeometry(0.72, 0.1, 0.44), 0x221100, 0, 0, 0);
+    // --- Cargo pants (dark olive) ---
+    this.legL = this._mk(new THREE.BoxGeometry(.28,1.0,.3), 0x3a4a28, -.19,.25,0, this.root);
+    this.legR = this._mk(new THREE.BoxGeometry(.28,1.0,.3), 0x3a4a28,  .19,.25,0, this.root);
 
-    // ── Torso (white shirt) ──────────────────
-    this.torso = this._part(new THREE.BoxGeometry(0.74, 0.9, 0.46), 0xf4f4f4, 0, 0, 0);
+    // Knee pads
+    this._mk(new THREE.BoxGeometry(.3,.18,.32), 0x222a14, -.19,.18,0, this.root);
+    this._mk(new THREE.BoxGeometry(.3,.18,.32), 0x222a14,  .19,.18,0, this.root);
 
-    // School badge
-    this.badge = this._part(new THREE.BoxGeometry(0.14, 0.14, 0.04), 0x1a3a88, 0, 0, 0, this.torso);
+    // Cargo pockets on legs
+    this._mk(new THREE.BoxGeometry(.14,.2,.08), 0x2e3d1c, -.32,.2,.12, this.root);
+    this._mk(new THREE.BoxGeometry(.14,.2,.08), 0x2e3d1c,  .32,.2,.12, this.root);
 
-    // Tie
-    this.tie = this._part(new THREE.BoxGeometry(0.11, 0.55, 0.06), 0x1a3a88, 0, 0, 0, this.torso);
+    // --- Belt ---
+    this._mk(new THREE.BoxGeometry(.76,.1,.46), 0x111111, 0,.59,0, this.root);
+    // Belt buckle
+    this._mk(new THREE.BoxGeometry(.1,.1,.05), 0x888888, 0,.59,.24, this.root, 0, .8);
 
-    // ── Backpack ─────────────────────────────
-    this.bag = this._part(new THREE.BoxGeometry(0.42, 0.54, 0.22), 0xcc2828, 0, 0, 0);
-    this.bagPocket = this._part(new THREE.BoxGeometry(0.38, 0.16, 0.06), 0xaa1818, 0, 0, 0);
+    // --- Tactical vest (dark green) ---
+    this.torso = this._mk(new THREE.BoxGeometry(.76,.92,.48), 0x2a3a1a, 0,1.18,0, this.root);
 
-    // ── Arms ─────────────────────────────────
-    this.armL = this._part(new THREE.CapsuleGeometry(0.12, 0.58, 4, 8), 0xf4f4f4, 0, 0, 0);
-    this.armR = this._part(new THREE.CapsuleGeometry(0.12, 0.58, 4, 8), 0xf4f4f4, 0, 0, 0);
-    this.handL = this._part(new THREE.SphereGeometry(0.13, 8, 8), 0xeebb88, 0, 0, 0);
-    this.handR = this._part(new THREE.SphereGeometry(0.13, 8, 8), 0xeebb88, 0, 0, 0);
+    // Vest straps
+    this._mk(new THREE.BoxGeometry(.08,.85,.04), 0x1a2a0a, -.22,1.18,.25, this.root);
+    this._mk(new THREE.BoxGeometry(.08,.85,.04), 0x1a2a0a,  .22,1.18,.25, this.root);
 
-    // ── Neck ─────────────────────────────────
-    this.neck = this._part(new THREE.CylinderGeometry(0.12, 0.13, 0.24, 8), 0xeebb88, 0, 0, 0);
+    // Chest pouches
+    this._mk(new THREE.BoxGeometry(.18,.18,.1), 0x222c12, -.22,1.28,.28, this.root);
+    this._mk(new THREE.BoxGeometry(.18,.18,.1), 0x222c12,  .22,1.28,.28, this.root);
+    this._mk(new THREE.BoxGeometry(.22,.12,.1), 0x1e2810, 0,1.1,.28, this.root);
 
-    // ── Head ─────────────────────────────────
-    this.head = this._part(new THREE.BoxGeometry(0.58, 0.6, 0.56), 0xeebb88, 0, 0, 0);
+    // --- Arms ---
+    this.armL = this._mk(new THREE.BoxGeometry(.26,.9,.28), 0x3a4a28, -.5,1.12,0, this.root);
+    this.armR = this._mk(new THREE.BoxGeometry(.26,.9,.28), 0x3a4a28,  .5,1.12,0, this.root);
 
-    // Hair
-    this.hair = this._part(new THREE.BoxGeometry(0.62, 0.32, 0.58), 0x180800, 0, 0, 0, this.head);
+    // Elbow pads
+    this._mk(new THREE.BoxGeometry(.28,.2,.3), 0x222a14, -.5,1.0,0, this.root);
+    this._mk(new THREE.BoxGeometry(.28,.2,.3), 0x222a14,  .5,1.0,0, this.root);
 
-    // Ears
-    this.earL = this._part(new THREE.SphereGeometry(0.07, 6, 6), 0xeebb88, 0, 0, 0, this.head);
-    this.earR = this._part(new THREE.SphereGeometry(0.07, 6, 6), 0xeebb88, 0, 0, 0, this.head);
+    // Tactical gloves (dark)
+    this.handL = this._mk(new THREE.BoxGeometry(.22,.2,.24), 0x1a1a1a, -.5,.66,0, this.root);
+    this.handR = this._mk(new THREE.BoxGeometry(.22,.2,.24), 0x1a1a1a,  .5,.66,0, this.root);
 
-    // Eyes (whites)
-    this.eyeWL = this._part(new THREE.SphereGeometry(0.075, 8, 8), 0xffffff, 0, 0, 0, this.head);
-    this.eyeWR = this._part(new THREE.SphereGeometry(0.075, 8, 8), 0xffffff, 0, 0, 0, this.head);
-    // Pupils
-    this.pupilL = this._part(new THREE.SphereGeometry(0.048, 6, 6), 0x111111, 0, 0, 0, this.head);
-    this.pupilR = this._part(new THREE.SphereGeometry(0.048, 6, 6), 0x111111, 0, 0, 0, this.head);
+    // --- Neck ---
+    this._mk(new THREE.CylinderGeometry(.12,.13,.22,8), 0xd4945a, 0,1.7,0, this.root);
 
-    // Eyebrows
-    this.browL = this._part(new THREE.BoxGeometry(0.11, 0.025, 0.03), 0x180800, 0, 0, 0, this.head);
-    this.browR = this._part(new THREE.BoxGeometry(0.11, 0.025, 0.03), 0x180800, 0, 0, 0, this.head);
+    // --- Head ---
+    this.head = this._mk(new THREE.BoxGeometry(.6,.62,.58), 0xd4945a, 0,1.86,0, this.root);
 
-    // Nose
-    this.nose = this._part(new THREE.SphereGeometry(0.048, 6, 6), 0xd89060, 0, 0, 0, this.head);
+    // Tactical helmet (dark green)
+    this.helmet = new THREE.Group();
+    this._mk(new THREE.BoxGeometry(.64,.32,.62), 0x2a3a1a, 0,.36,0, this.helmet);
+    // Helmet brim
+    this._mk(new THREE.BoxGeometry(.68,.05,.68), 0x222c12, 0,.2,0, this.helmet);
+    // Helmet night-vision mount (decoration)
+    this._mk(new THREE.BoxGeometry(.12,.06,.3),  0x111111, 0,.4,.18, this.helmet);
+    this.helmet.position.set(0,1.86,0);
+    this.root.add(this.helmet);
 
-    // Smile
-    this.mouth = this._part(new THREE.BoxGeometry(0.14, 0.036, 0.03), 0x993333, 0, 0, 0, this.head);
+    // Goggles on helmet
+    this._mk(new THREE.BoxGeometry(.52,.12,.06), 0x113355, 0,1.92,.3, this.root, true, .1, .7);
 
-    this._pose(); // Set initial pose
+    // Face mask (lower)
+    this._mk(new THREE.BoxGeometry(.54,.18,.06), 0x1a2210, 0,1.76,.3, this.root);
+
+    // Eyes (visible above mask)
+    this._mk(new THREE.SphereGeometry(.065,8,8), 0x111111, -.12,1.9,.31, this.root);
+    this._mk(new THREE.SphereGeometry(.065,8,8), 0x111111,  .12,1.9,.31, this.root);
+    // Eye whites
+    this._mk(new THREE.SphereGeometry(.042,6,6), 0xffffff, -.115,1.9,.36, this.root);
+    this._mk(new THREE.SphereGeometry(.042,6,6), 0xffffff,  .115,1.9,.36, this.root);
+
+    // Backpack / tactical rig
+    this._mk(new THREE.BoxGeometry(.44,.56,.22), 0x1e2810, 0,1.14,-.3, this.root);
+    this._mk(new THREE.BoxGeometry(.4,.16,.06),  0x161f0c, 0,.95,-.3,  this.root);
+    this._mk(new THREE.BoxGeometry(.1,.42,.1),   0x161f0c, 0,1.14,-.42, this.root);
   }
 
-  _part(geo, color, x, y, z, parent) {
-    const mesh = new THREE.Mesh(geo, this._mat(color));
-    mesh.position.set(x, y, z);
-    mesh.castShadow = true;
-    (parent || this.group).add(mesh);
-    return mesh;
+  _mk(geo, hex, x, y, z, parent, addToRoot=true, rough=0.75, metal=0) {
+    const m = new THREE.Mesh(geo, this._mat(hex, rough, metal));
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    parent.add(m);
+    return m;
   }
 
-  _pose() {
-    // Shoes
-    this.shoeL.position.set(-0.19, -0.19, 0.05);
-    this.shoeR.position.set( 0.19, -0.19, 0.05);
-    // Legs
-    this.legL.position.set(-0.19, 0.28, 0);
-    this.legR.position.set( 0.19, 0.28, 0);
-    // Belt
-    this.belt.position.set(0, 0.58, 0);
-    // Torso
-    this.torso.position.set(0, 1.17, 0);
-    // Badge (on torso)
-    this.badge.position.set(-0.22, 0.2, 0.24);
-    // Tie (on torso)
-    this.tie.position.set(0, 0.1, 0.25);
-    // Bag
-    this.bag.position.set(0, 1.12, -0.3);
-    this.bagPocket.position.set(0, 0.93, -0.3);
-    // Arms
-    this.armL.position.set(-0.47, 1.12, 0);
-    this.armR.position.set( 0.47, 1.12, 0);
-    this.handL.position.set(-0.47, 0.66, 0);
-    this.handR.position.set( 0.47, 0.66, 0);
-    // Neck
-    this.neck.position.set(0, 1.68, 0);
-    // Head
-    this.head.position.set(0, 1.85, 0);
-    // Hair (on head local)
-    this.hair.position.set(0, 0.17, -0.02);
-    // Ears
-    this.earL.position.set(-0.3, 0, 0);
-    this.earR.position.set( 0.3, 0, 0);
-    // Eyes
-    this.eyeWL.position.set(-0.115, 0.06, 0.275);
-    this.eyeWR.position.set( 0.115, 0.06, 0.275);
-    this.pupilL.position.set(-0.115, 0.06, 0.31);
-    this.pupilR.position.set( 0.115, 0.06, 0.31);
-    // Brows
-    this.browL.position.set(-0.115, 0.155, 0.285);
-    this.browR.position.set( 0.115, 0.155, 0.285);
-    // Nose
-    this.nose.position.set(0, -0.04, 0.295);
-    // Mouth
-    this.mouth.position.set(0, -0.13, 0.285);
+  // ── GUN (assault rifle) ──────────────────
+  _buildGun() {
+    this.gunGroup = new THREE.Group();
+
+    const gMat = this._mat(0x1a1a1a, 0.4, 0.7);
+    const dMat = this._mat(0x111111, 0.9, 0.1);
+    const bMat = this._mat(0x333333, 0.6, 0.5);
+
+    // Receiver body
+    const recv = new THREE.Mesh(new THREE.BoxGeometry(.1,.12,.7), gMat);
+    recv.castShadow = true;
+    this.gunGroup.add(recv);
+
+    // Barrel
+    const brl = new THREE.Mesh(new THREE.CylinderGeometry(.028,.028,.65,8), gMat);
+    brl.rotation.x = Math.PI/2;
+    brl.position.set(0,.02,.68);
+    this.gunGroup.add(brl);
+
+    // Suppressor
+    const sup = new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,.2,8), dMat);
+    sup.rotation.x = Math.PI/2;
+    sup.position.set(0,.02,.98);
+    this.gunGroup.add(sup);
+
+    // Barrel tip (muzzle)
+    this.muzzle = new THREE.Object3D();
+    this.muzzle.position.set(0,.02,1.08);
+    this.gunGroup.add(this.muzzle);
+
+    // Stock
+    const stk = new THREE.Mesh(new THREE.BoxGeometry(.08,.14,.28), dMat);
+    stk.position.set(0,.01,-.42);
+    this.gunGroup.add(stk);
+
+    // Grip
+    const grp = new THREE.Mesh(new THREE.BoxGeometry(.09,.22,.12), dMat);
+    grp.position.set(0,-.14,.08);
+    this.gunGroup.add(grp);
+
+    // Magazine
+    const mag = new THREE.Mesh(new THREE.BoxGeometry(.07,.22,.08), bMat);
+    mag.position.set(0,-.18,.05);
+    this.gunGroup.add(mag);
+
+    // Scope
+    const sc = new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,.24,8), bMat);
+    sc.rotation.x = Math.PI/2;
+    sc.position.set(0,.1,.05);
+    this.gunGroup.add(sc);
+
+    // Scope lens (blue tint)
+    const sl = new THREE.Mesh(new THREE.CircleGeometry(.035,8),
+      new THREE.MeshStandardMaterial({color:0x2244aa,emissive:0x112244,roughness:.1,metalness:.5}));
+    sl.rotation.x = Math.PI/2;
+    sl.position.set(0,.1,.17);
+    this.gunGroup.add(sl);
+
+    // Foregrip
+    const fg = new THREE.Mesh(new THREE.BoxGeometry(.07,.18,.08), dMat);
+    fg.position.set(0,-.1,.3);
+    this.gunGroup.add(fg);
+
+    // Rail
+    const rl = new THREE.Mesh(new THREE.BoxGeometry(.12,.04,.5), bMat);
+    rl.position.set(0,.08,.15);
+    this.gunGroup.add(rl);
+
+    // Muzzle flash mesh (hidden normally)
+    this._muzzleFlash = new THREE.Mesh(
+      new THREE.SphereGeometry(.1,8,8),
+      new THREE.MeshBasicMaterial({color:0xffaa00,transparent:true,opacity:0})
+    );
+    this._muzzleFlash.position.copy(this.muzzle.position);
+    this.gunGroup.add(this._muzzleFlash);
+
+    // Position gun in right hand area — will be animated
+    this.gunGroup.position.set(.42,.66,.06);
+    this.gunGroup.rotation.y = Math.PI;
+    this.root.add(this.gunGroup);
   }
 
-  animate(dt, moving, running, isGrounded) {
-    if (moving && isGrounded) {
-      this._walkTime += dt * (running ? 2.8 : 1.8);
-    } else {
-      this._walkTime += dt * 0.5; // idle sway
-    }
-    const t = this._walkTime;
-    const bob   = moving && isGrounded ? Math.sin(t) * 0.045 : Math.sin(t * 0.5) * 0.008;
-    const swing = moving && isGrounded ? Math.sin(t) * 0.38 : 0;
-    const lean  = running && moving ? 0.12 : 0;
+  // ── Animate ──────────────────────────────
+  animate(dt, moving, running, grounded, firing) {
+    this._walkT  += dt * (moving ? (running ? 2.6 : 1.7) : 0.4);
+    this._fireTimer = Math.max(0, this._fireTimer - dt);
+    this._aimT   = THREE.MathUtils.lerp(this._aimT, firing ? 1 : 0, 8*dt);
+    if (this._squishT > 0) this._squishT -= dt;
 
-    // Bob everything
-    this.torso.position.y   = 1.17 + bob;
-    this.head.position.y    = 1.85 + bob;
-    this.neck.position.y    = 1.68 + bob;
-    this.bag.position.y     = 1.12 + bob;
-    this.bagPocket.position.y = 0.93 + bob;
-    this.belt.position.y    = 0.58 + bob * 0.5;
+    const t   = this._walkT;
+    const bob = moving && grounded ? Math.sin(t)*.048 : Math.sin(t*.5)*.007;
+    const sw  = moving && grounded ? Math.sin(t)*.36  : 0;
+    const lean= running && moving  ? .14 : 0;
+
+    // Body bob
+    this.torso.position.y     = 1.18 + bob;
+    this.head.position.y      = 1.86 + bob;
+    this.helmet.position.y    = 1.86 + bob;
 
     // Leg swing
-    this.legL.rotation.x   = swing;
-    this.legR.rotation.x   = -swing;
-    this.shoeL.position.y  = -0.19 + (moving && isGrounded ? Math.max(0, Math.sin(t) * 0.1) : 0);
-    this.shoeR.position.y  = -0.19 + (moving && isGrounded ? Math.max(0, Math.sin(t + Math.PI) * 0.1) : 0);
+    this.legL.rotation.x = sw;
+    this.legR.rotation.x = -sw;
 
-    // Arm swing (opposite to legs)
-    this.armL.rotation.x = -swing * 0.85;
-    this.armR.rotation.x =  swing * 0.85;
-    this.handL.position.y = 0.66 + bob;
-    this.handR.position.y = 0.66 + bob;
+    // Arm swing
+    this.armL.rotation.x = -sw*.7;
+    this.armR.rotation.x = firing ? -.2 + sw*.2 : sw*.7;
 
-    // Body lean forward when running
+    // Body lean when running
     this.torso.rotation.x = lean;
-    this.head.rotation.x  = -lean * 0.5;
-
-    // Idle head bob
-    this.head.rotation.y = Math.sin(t * 0.4) * 0.04;
+    this.head.rotation.x  = -lean*.4;
 
     // Jump pose
-    if (!isGrounded) {
-      this.legL.rotation.x = 0.5;
-      this.legR.rotation.x = 0.5;
-      this.armL.rotation.x = -0.65;
-      this.armR.rotation.x = -0.65;
+    if (!grounded) {
+      this.legL.rotation.x = .55;
+      this.legR.rotation.x = .55;
+      this.armL.rotation.x = -.7;
+      this.armR.rotation.x = -.7;
     }
 
     // Landing squish
-    if (isGrounded && !this._wasGrounded) {
-      this._squishTimer = 0.12;
-    }
-    this._wasGrounded = isGrounded;
-    if (this._squishTimer > 0) {
-      const s = 1 - this._squishTimer * 3;
-      this.group.scale.set(1 + this._squishTimer * 0.5, 1 - this._squishTimer * 0.4, 1 + this._squishTimer * 0.5);
-      this._squishTimer -= dt;
+    if (grounded && !this._wasGrounded) this._squishT = .12;
+    this._wasGrounded = grounded;
+    if (this._squishT > 0) {
+      this.root.scale.set(1+this._squishT*.4, 1-this._squishT*.35, 1+this._squishT*.4);
     } else {
-      this.group.scale.setScalar(1);
+      this.root.scale.setScalar(1);
+    }
+
+    // Gun bob & position
+    const gunBob = moving && grounded ? Math.sin(t*2)*.02 : 0;
+    this.gunGroup.position.set(
+      THREE.MathUtils.lerp(.42, .2, this._aimT),
+      .66 + bob + gunBob,
+      THREE.MathUtils.lerp(.06, .1, this._aimT)
+    );
+    this.gunGroup.rotation.x = THREE.MathUtils.lerp(0, -.05, this._aimT);
+
+    // Reload animation
+    if (this.reloading) {
+      this._reloadTimer -= dt;
+      this.gunGroup.rotation.z = Math.sin(this._reloadTimer*4)*.3;
+      if (this._reloadTimer <= 0) {
+        this.reloading = false;
+        this.gunGroup.rotation.z = 0;
+        const needed = this.maxAmmo - this.ammo;
+        const give   = Math.min(needed, this.reserve);
+        this.ammo   += give;
+        this.reserve -= give;
+      }
+    }
+
+    // Muzzle flash fade
+    if (this._muzzleFlash.material.opacity > 0) {
+      this._muzzleFlash.material.opacity -= dt * 8;
     }
   }
 
-  get x() { return this.position.x; }
-  get y() { return this.position.y; }
-  get z() { return this.position.z; }
+  triggerReload() {
+    if (this.reloading || this.reserve <= 0 || this.ammo >= this.maxAmmo) return false;
+    this.reloading    = true;
+    this._reloadTimer = 2.0;
+    return true;
+  }
 
-  syncGroupTransform() {
-    this.group.position.set(this.position.x, this.position.y, this.position.z);
-    this.group.rotation.y = this.rotation;
+  triggerMuzzleFlash() {
+    this._muzzleFlash.material.opacity = 1;
+    this._muzzleFlash.scale.setScalar(.5 + Math.random()*.5);
+  }
+
+  syncTransform() {
+    this.root.position.set(this.position.x, this.position.y, this.position.z);
+    this.root.rotation.y = this.rotation;
   }
 }
