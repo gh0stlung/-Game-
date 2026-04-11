@@ -1,94 +1,145 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Mahtabrai U.M. Vidyalaya – 3D Explorer</title>
-  <link rel="stylesheet" href="src/style.css" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover"/>
+  <meta name="theme-color" content="#0a1e50"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen"/>
+  <meta name="apple-mobile-web-app-title" content="SchoolGame"/>
+  <link rel="apple-touch-icon" href="icons/icon-192.png"/>
+  <link rel="manifest" href="manifest.webmanifest"/>
+  <title>Mahtabrai Open World</title>
+  <link rel="stylesheet" href="src/style.css"/>
 </head>
 <body>
-  <div id="app">
-    <!-- Loading Screen -->
-    <div id="loading-screen">
-      <div class="loading-inner">
-        <div class="school-logo">🏫</div>
-        <h1>MAHTABRAI U.M. VIDYALAYA</h1>
-        <p>3D School Explorer</p>
-        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-        <div class="loading-text" id="loading-text">Initializing...</div>
+  <!-- LOADING -->
+  <div id="loading">
+    <div class="ld-inner">
+      <div class="ld-logo">🎮</div>
+      <h1>MAHTABRAI<br><span>OPEN WORLD</span></h1>
+      <div class="ld-bar"><div class="ld-fill" id="ld-fill"></div></div>
+      <p id="ld-text">Initializing…</p>
+    </div>
+  </div>
+
+  <!-- CANVAS -->
+  <canvas id="c"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <!-- Top bar -->
+    <div id="top-bar">
+      <div id="zone-lbl">📍 Campus</div>
+      <div id="time-lbl">☀️ 08:00</div>
+    </div>
+
+    <!-- Health & ammo -->
+    <div id="stats">
+      <div id="hp-bar">
+        <span>❤️</span>
+        <div class="bar-bg"><div class="bar-fill" id="hp-fill" style="width:100%;background:#22cc44"></div></div>
+        <span id="hp-txt">100</span>
+      </div>
+      <div id="ammo-box">
+        <span>🔫</span><span id="ammo-txt">30 / 90</span>
       </div>
     </div>
 
-    <!-- Game Canvas -->
-    <canvas id="game-canvas"></canvas>
-
-    <!-- HUD -->
-    <div id="hud">
-      <div id="school-banner">🏫 MAHTABRAI U.M. VIDYALAYA</div>
-      <div id="zone-label">📍 Campus</div>
-      <div id="time-label">☀️ Day — 08:00 AM</div>
-      <div id="interact-hint">🚪 Press E or Tap to Enter</div>
-      <div id="crosshair">+</div>
+    <!-- Crosshair -->
+    <div id="xhair">
+      <div class="xh xh-t"></div>
+      <div class="xh xh-b"></div>
+      <div class="xh xh-l"></div>
+      <div class="xh xh-r"></div>
+      <div class="xh xh-c"></div>
     </div>
 
-    <!-- Settings Button -->
-    <button id="settings-btn" title="Settings">⚙️</button>
+    <!-- Kill / hit feed -->
+    <div id="killfeed"></div>
 
-    <!-- Settings Panel -->
-    <div id="settings-panel">
-      <h2>⚙ Settings</h2>
-      <label>Camera Sensitivity: <span id="sens-val">2.0</span></label>
-      <input type="range" id="sens-slider" min="0.1" max="5" step="0.1" value="2.0" />
-      <label>Player Speed: <span id="speed-val">1.0</span></label>
-      <input type="range" id="speed-slider" min="0.5" max="3" step="0.1" value="1.0" />
-      <label>Volume: <span id="vol-val">50%</span></label>
-      <input type="range" id="vol-slider" min="0" max="1" step="0.05" value="0.5" />
-      <div class="setting-row">
-        <label>Graphics Quality</label>
-        <select id="quality-select">
+    <!-- Interact hint -->
+    <div id="hint">🚪 Tap to Enter</div>
+
+    <!-- Reload hint -->
+    <div id="reload-hint">Press R to Reload</div>
+  </div>
+
+  <!-- SETTINGS BTN -->
+  <button id="sbtn" title="Menu">☰</button>
+
+  <!-- PAUSE MENU -->
+  <div id="pause-menu">
+    <div class="pm-box">
+      <h2>⏸ PAUSED</h2>
+      <button id="pm-resume">▶ Resume</button>
+      <div class="pm-row">
+        <label>Sensitivity</label>
+        <input type="range" id="sl-sens" min="0.5" max="5" step="0.1" value="2"/>
+        <span id="sv-sens">2.0</span>
+      </div>
+      <div class="pm-row">
+        <label>Speed</label>
+        <input type="range" id="sl-spd" min="0.5" max="3" step="0.1" value="1"/>
+        <span id="sv-spd">1.0</span>
+      </div>
+      <div class="pm-row">
+        <label>Volume</label>
+        <input type="range" id="sl-vol" min="0" max="1" step="0.05" value="0.5"/>
+        <span id="sv-vol">50%</span>
+      </div>
+      <div class="pm-row">
+        <label>Graphics</label>
+        <select id="sl-gfx">
           <option value="low">Low</option>
-          <option value="medium" selected>Medium</option>
+          <option value="med" selected>Medium</option>
           <option value="high">High</option>
         </select>
       </div>
-      <button id="settings-close">✕ Close</button>
-    </div>
-
-    <!-- Minimap -->
-    <div id="minimap-container">
-      <canvas id="minimap-canvas" width="160" height="160"></canvas>
-      <div id="minimap-label">MAP</div>
-    </div>
-
-    <!-- Room Info Card -->
-    <div id="room-overlay">
-      <div id="room-card">
-        <div class="room-icon" id="room-icon">🏫</div>
-        <h2 id="room-title">Room</h2>
-        <p id="room-desc">Description</p>
-        <button id="room-close">🚪 Exit Room</button>
-      </div>
-    </div>
-
-    <!-- Mobile Controls -->
-    <div id="mobile-controls">
-      <div id="joystick-zone">
-        <div id="joystick-base">
-          <div id="joystick-stick"></div>
-        </div>
-      </div>
-      <div id="action-buttons">
-        <button class="action-btn" id="btn-jump">⬆<br>JUMP</button>
-        <button class="action-btn" id="btn-run">🏃<br>RUN</button>
-        <button class="action-btn" id="btn-interact">🚪<br>ENTER</button>
-      </div>
-    </div>
-
-    <!-- Desktop hint -->
-    <div id="desktop-hint">
-      WASD / Arrows — Move &nbsp;|&nbsp; Mouse — Look &nbsp;|&nbsp; Shift — Run &nbsp;|&nbsp; Space — Jump &nbsp;|&nbsp; E — Enter Room &nbsp;|&nbsp; Click canvas to lock mouse
     </div>
   </div>
+
+  <!-- MINIMAP -->
+  <div id="mmap-wrap">
+    <canvas id="mmap" width="160" height="160"></canvas>
+  </div>
+
+  <!-- ROOM CARD -->
+  <div id="room-overlay">
+    <div id="room-card">
+      <div id="rm-icon">🏫</div>
+      <h2 id="rm-title">Room</h2>
+      <p id="rm-desc">…</p>
+      <button id="rm-close">Exit</button>
+    </div>
+  </div>
+
+  <!-- PWA INSTALL BANNER -->
+  <div id="pwa-banner">
+    <span>📲 Install as App for fullscreen!</span>
+    <button id="pwa-install">Install</button>
+    <button id="pwa-dismiss">✕</button>
+  </div>
+
+  <!-- MOBILE CONTROLS -->
+  <div id="mobile-ui">
+    <!-- Left joystick -->
+    <div id="joy-zone">
+      <div id="joy-ring"></div>
+      <div id="joy-dot"></div>
+    </div>
+    <!-- Right side buttons -->
+    <div id="right-btns">
+      <button class="rbtn" id="btn-fire">🔫</button>
+      <button class="rbtn" id="btn-jump">⬆</button>
+      <button class="rbtn" id="btn-reload">R</button>
+      <button class="rbtn" id="btn-sprint">💨</button>
+    </div>
+  </div>
+
+  <!-- DESKTOP HINT -->
+  <div id="dsk-hint">WASD Move · Mouse Look · LMB Shoot · R Reload · Shift Sprint · Space Jump · E Enter · ESC Menu</div>
 
   <script type="module" src="src/main.js"></script>
 </body>
