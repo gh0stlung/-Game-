@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+
 import { Tex }      from './textures.js';
 import { World }    from './world.js';
 import { Player }   from './player.js';
@@ -6,6 +7,7 @@ import { Input }    from './input.js';
 import { Audio }    from './audio.js';
 import { DayNight } from './daynight.js';
 import { Minimap }  from './minimap.js';
+import { ParticleSystem } from './particles.js';
 
 const GRAV = -26, JFRC = 12, FIRE_RATE = 0.1;
 const ZONES=[
@@ -37,6 +39,7 @@ export class Game {
     this._lz = ''; this._nearDoor = -1; this._inRoom = false;
     this._clock = new THREE.Clock(); this._running = false;
     this._fireTimer = 0; this._paused = false;
+    this.tracers = [];
   }
 
   async start(){
@@ -70,10 +73,15 @@ export class Game {
     this.audio    = new Audio();
     this.daynight = new DayNight(this._scene, this.world);
     this.minimap  = new Minimap();
+    this.particles = new ParticleSystem(this._scene);
     this._prog(96,'Finalizing…'); await frame();
     this._setupUI();
     this._setupPWA();
-    window.addEventListener('resize', ()=>{ this._cam.aspect=innerWidth/innerHeight; this._cam.updateProjectionMatrix(); this._renderer.setSize(innerWidth,innerHeight); });
+    window.addEventListener('resize', ()=>{ 
+      this._cam.aspect=innerWidth/innerHeight; 
+      this._cam.updateProjectionMatrix(); 
+      this._renderer.setSize(innerWidth,innerHeight); 
+    });
     this._prog(100,'Ready!'); await new Promise(r=>setTimeout(r,500));
     this._ld.classList.add('out');
     setTimeout(()=>this._ld.style.display='none', 900);
@@ -84,20 +92,21 @@ export class Game {
   _prog(p,t){ if(this._fill)this._fill.style.width=p+'%'; if(this._ldTxt)this._ldTxt.textContent=t; }
   _showErr(e){
     if(this._ld){ this._ld.style.display='flex'; this._ld.classList.remove('out');
-      this._ld.innerHTML=`<div style="text-align:center;color:#fff;padding:40px"><div style="font-size:56px">❌</div><h2 style="color:#f55;margin:16px 0 12px">Failed to Load</h2><p style="color:#aac;font-size:13px;margin-bottom:20px">${e.message||e}</p><button onclick="location.reload()" style="padding:12px 28px;background:#ffd700;border:none;border-radius:10px;cursor:pointer;font-weight:bold;font-size:15px;color:#000">🔄 Retry</button></div>`; }
+      this._ld.innerHTML=`<div style="text-align:center;color:#fff;padding:40px"><div style="font-size:56px">❌</div><h2 style="color:#f55;margin:16px 0 12px">Game Over</h2><p style="color:#aac;font-size:16px;margin-bottom:20px">${e.message||e}</p><button onclick="location.reload()" style="padding:12px 28px;background:#ffd700;border:none;border-radius:10px;cursor:pointer;font-weight:bold;font-size:15px;color:#000">🔄 Restart</button></div>`; }
   }
 
   _initRenderer(){
-    this._renderer = new THREE.WebGLRenderer({canvas:this._canvas,antialias:devicePixelRatio<2,powerPreference:'high-performance'});
+    this._renderer = new THREE.WebGLRenderer({canvas:this._canvas,antialias:false,powerPreference:'high-performance'});
     this._renderer.setPixelRatio(Math.min(devicePixelRatio,2));
     this._renderer.setSize(innerWidth,innerHeight);
     this._renderer.shadowMap.enabled=true; this._renderer.shadowMap.type=THREE.PCFSoftShadowMap;
     this._renderer.outputColorSpace=THREE.SRGBColorSpace;
     this._renderer.toneMapping=THREE.ACESFilmicToneMapping; this._renderer.toneMappingExposure=1.0;
   }
+  
   _initScene(){
     this._scene=new THREE.Scene(); this._scene.background=new THREE.Color(.53,.81,.98);
-    this._scene.fog=new THREE.FogExp2(0x87ceeb,.006);
+    // Fog removed for better visibility
     this._cam=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.15,900);
   }
 
@@ -108,7 +117,7 @@ export class Game {
     const hpTxt=document.getElementById('hp-txt');
     const ammoEl=document.getElementById('ammo-txt');
     if(hpEl){ const pct=p.hp/p.maxHp*100; hpEl.style.width=pct+'%'; hpEl.style.background=pct>60?'#22cc44':pct>30?'#ffaa00':'#ff2222'; }
-    if(hpTxt) hpTxt.textContent=p.hp;
+    if(hpTxt) hpTxt.textContent=Math.max(0, Math.floor(p.hp));
     if(ammoEl) ammoEl.textContent=`${p.ammo} / ${p.reserve}`;
     const reloadHint=document.getElementById('reload-hint');
     if(reloadHint) reloadHint.style.display=(p.ammo===0&&!p.reloading)?'block':'none';
@@ -126,23 +135,41 @@ export class Game {
     p.ammo--; this._fireTimer=FIRE_RATE;
     p.triggerMuzzleFlash();
     this.audio.shoot();
+    
     // Raycast from camera
     const raycaster=new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(0,0),this._cam);
     const hits=raycaster.intersectObjects(this._scene.children,true);
+    
+    let hitPoint = null;
     if(hits.length>0){
       const hit=hits[0];
+      hitPoint = hit.point;
+      
       this._spawnBulletHole(hit.point, hit.face?.normal);
-      this._addKillFeed('💥 Hit!');
+      this.particles.spawn(hit.point, 0xaaaaaa, 4, 3);
+    } else {
+      hitPoint = raycaster.ray.at(100, new THREE.Vector3());
     }
+
+    const muzzlePos = p.getMuzzlePosition();
+    this._spawnTracer(muzzlePos, hitPoint);
+
     // Camera kick
     this._camPitch+=.012*(Math.random()-.2);
     this._camYaw  +=.008*(Math.random()-.5);
     if(p.ammo===0) setTimeout(()=>{ if(p.reserve>0&&!p.reloading){ p.triggerReload(); this.audio.reload(); }},300);
   }
 
+  _spawnTracer(start, end) {
+    const mat = new THREE.LineBasicMaterial({ color: 0xffddaa, transparent: true, opacity: 1 });
+    const geo = new THREE.BufferGeometry().setFromPoints([start, end]);
+    const line = new THREE.Line(geo, mat);
+    this._scene.add(line);
+    this.tracers.push({ line, life: 1.0 });
+  }
+
   _spawnBulletHole(pos, normal){
-    // Add 2D bullet hole on screen briefly
     const el=document.createElement('div'); el.className='bhole';
     el.style.left=(30+Math.random()*40)+'%'; el.style.top=(30+Math.random()*40)+'%';
     document.body.appendChild(el);
@@ -221,14 +248,10 @@ export class Game {
     bind('sl-spd',  ()=>this.player.speedMultiplier, v=>this.player.speedMultiplier=v, 'sv-spd');
     bind('sl-vol',  ()=>.5, v=>this.audio.setVolume(v), 'sv-vol');
 
-    // First click → audio
     const ua=()=>{this.audio.init();document.removeEventListener('click',ua);document.removeEventListener('touchstart',ua);};
     document.addEventListener('click',ua); document.addEventListener('touchstart',ua,{passive:true});
 
-    // Touch device
     if('ontouchstart' in window||navigator.maxTouchPoints>0) document.body.classList.add('touch');
-
-    // Damage flash element
     if(!document.getElementById('dmg-flash')){const el=document.createElement('div');el.id='dmg-flash';document.body.appendChild(el);}
   }
 
@@ -248,7 +271,6 @@ export class Game {
     document.getElementById('pwa-dismiss')?.addEventListener('click',()=>{
       const b=document.getElementById('pwa-banner'); if(b) b.classList.remove('show');
     });
-    // Fullscreen on mobile tap
     document.addEventListener('touchstart',()=>{
       if(document.documentElement.requestFullscreen&&!document.fullscreenElement)
         document.documentElement.requestFullscreen().catch(()=>{});
@@ -262,31 +284,24 @@ export class Game {
     try{
       const dt=Math.min(this._clock.getDelta(),.1);
       const pm=document.getElementById('pause-menu');
-      if(pm?.classList.contains('open')) return; // paused
+      if(pm?.classList.contains('open')) return;
 
       const inp=this.input.getState();
       this._fireTimer=Math.max(0,this._fireTimer-dt);
 
-      // Camera
       this._camYaw  +=inp.camDX;
       this._camPitch+=inp.camDY;
       this._camPitch =THREE.MathUtils.clamp(this._camPitch,-.28,1.28);
 
-      // Jump
       if(inp.jump&&this.player.grounded){this.player.velocity.y=JFRC;this.player.grounded=false;this.audio.jump();}
-      // Reload
       if(inp.reload&&!this.player.reloading){this.player.triggerReload();this.audio.reload();}
-      // Interact
       if(inp.interact) this._tryInteract();
-      // Fire
       if(inp.fire) this._tryFire();
 
-      // Movement — FIXED: my positive = joystick DOWN = move BACKWARD, my negative = UP = FORWARD
       const speed=(inp.sprint?9:4.5)*this.player.speedMultiplier;
-      const fwdX=Math.sin(this._camYaw), fwdZ=Math.cos(this._camYaw);
+      const fwdX=-Math.sin(this._camYaw), fwdZ=-Math.cos(this._camYaw);
       const rigX=Math.cos(this._camYaw), rigZ=-Math.sin(this._camYaw);
-      // my from input: positive=backward, negative=forward
-      // so multiply fwd by -my: if my is negative (up), -my is positive = move forward ✓
+      
       const mdx=fwdX*(-inp.my)+rigX*inp.mx;
       const mdz=fwdZ*(-inp.my)+rigZ*inp.mx;
       const ml=Math.sqrt(mdx*mdx+mdz*mdz), moving=ml>.001;
@@ -297,7 +312,17 @@ export class Game {
         vel.z=THREE.MathUtils.lerp(vel.z,mdz/ml*speed,13*dt);
         const ta=Math.atan2(mdx,mdz), da=Math.atan2(Math.sin(ta-this.player.rotation),Math.cos(ta-this.player.rotation));
         this.player.rotation+=da*14*dt;
-      }else{vel.x=THREE.MathUtils.lerp(vel.x,0,16*dt);vel.z=THREE.MathUtils.lerp(vel.z,0,16*dt);}
+      }else{
+        vel.x=THREE.MathUtils.lerp(vel.x,0,16*dt);
+        vel.z=THREE.MathUtils.lerp(vel.z,0,16*dt);
+      }
+
+      // Force rotation to face camera if firing
+      if (inp.fire) {
+        const ta = this._camYaw + Math.PI;
+        const da = Math.atan2(Math.sin(ta-this.player.rotation),Math.cos(ta-this.player.rotation));
+        this.player.rotation += da * 14 * dt;
+      }
 
       vel.y+=GRAV*dt;
       p.x+=vel.x*dt; p.z+=vel.z*dt; this._resolveCollisions();
@@ -319,16 +344,32 @@ export class Game {
       this._cp.lerp(tPos,lf); this._cl.lerp(tLook,lf);
       this._cam.position.copy(this._cp); this._cam.lookAt(this._cl);
 
+      // Update tracers
+      for(let i=this.tracers.length-1; i>=0; i--) {
+        const t = this.tracers[i];
+        t.life -= dt * 15;
+        t.line.material.opacity = t.life;
+        if(t.life <= 0) {
+          this._scene.remove(t.line);
+          this.tracers.splice(i, 1);
+        }
+      }
+
+      // Update particles
+      this.particles.update(dt);
+
       // Zone
       const zone=getZone(p.x,p.z);
       if(zone!==this._lz){this._lz=zone;const zl=document.getElementById('zone-lbl');if(zl)zl.textContent='📍 '+zone;}
-
+      
       this._checkNearby();
-      this._updateHUD();
-      this.daynight.update(dt);
       this.world.update(dt);
-      this.minimap.draw(p.x,p.z,this._camYaw);
-      this._renderer.render(this._scene,this._cam);
-    }catch(e){console.error('Frame error:',e);}
+      this.daynight.update(dt,p);
+      this.minimap.draw(p,this._camYaw);
+      this._updateHUD();
+
+      // Render directly
+      this._renderer.render(this._scene, this._cam);
+    }catch(e){console.error(e);this._showErr(e);this._running=false;}
   }
 }

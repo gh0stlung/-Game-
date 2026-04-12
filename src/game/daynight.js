@@ -17,7 +17,7 @@ export class DayNight {
     else if(h>=18&&h<21){const t=(h-18)/3;sr=L(.53,.04,t);sg=L(.81,.04,t);sb=L(.98,.10,t);si=1.8*(1-t);ai=.7*(1-t)+.14*t;}
     else{sr=.025;sg=.025;sb=.08;si=0;ai=.14;}
     this.scene.background=new THREE.Color(sr,sg,sb);
-    this.scene.fog.color.set(sr,sg,sb);
+    if (this.scene.fog) this.scene.fog.color.set(sr,sg,sb);
     this.world.updateDayNight(h,si,ai,h<7||h>=18);
   }
 }
