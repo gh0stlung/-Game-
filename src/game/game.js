@@ -299,7 +299,7 @@ export class Game {
       if(inp.fire) this._tryFire();
 
       const speed=(inp.sprint?9:4.5)*this.player.speedMultiplier;
-      const fwdX=-Math.sin(this._camYaw), fwdZ=-Math.cos(this._camYaw);
+      const fwdX=Math.sin(this._camYaw), fwdZ=Math.cos(this._camYaw);
       const rigX=Math.cos(this._camYaw), rigZ=-Math.sin(this._camYaw);
       
       const mdx=fwdX*(-inp.my)+rigX*inp.mx;
@@ -364,8 +364,8 @@ export class Game {
       
       this._checkNearby();
       this.world.update(dt);
-      this.daynight.update(dt,p);
-      this.minimap.draw(p,this._camYaw);
+      this.daynight.update(dt);
+      this.minimap.draw(p.x,p.z,this._camYaw);
       this._updateHUD();
 
       // Render directly
