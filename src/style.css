@@ -40,11 +40,6 @@ body{background:#000;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;tou
 #xhair.spread .xh-l{transform:translateY(-50%) translateX(-4px)}
 #xhair.spread .xh-r{transform:translateY(-50%) translateX(4px)}
 
-/* Kill feed */
-#killfeed{position:absolute;top:60px;right:14px;display:flex;flex-direction:column;gap:4px;align-items:flex-end}
-.kf-entry{background:rgba(0,0,0,.65);color:#ffd700;padding:4px 12px;border-radius:8px;font-size:12px;font-weight:600;animation:kfIn .2s ease;border-left:3px solid #ff4444}
-@keyframes kfIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
-
 /* Hints */
 #hint{position:absolute;bottom:190px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.78);color:#ffd700;padding:9px 22px;border-radius:20px;font-size:13px;font-weight:700;display:none;border:1px solid rgba(255,215,0,.4);animation:pulse 1.4s infinite;pointer-events:all;cursor:pointer}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
